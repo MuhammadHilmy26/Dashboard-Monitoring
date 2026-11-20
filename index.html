@@ -451,7 +451,7 @@
                     </div>
 
                     <div id="stream-container">
-                        <video id="remote-video" autoplay playsinline controls></video>
+                        <video id="remote-video" autoplay playsinline muted controls></video>
                         <div id="stream-status">Menghubungkan ke perangkat...</div>
                     </div>
                 </div>
@@ -537,29 +537,49 @@
             pc = new RTCPeerConnection({
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
+                    { urls: 'stun:free.expressturn.com:3478' },
+                    {
+                        urls: 'turn:free.expressturn.com:3478?transport=udp',
+                        username: 'USERNAME_EXPRESSTURN',
+                        credential: 'PASSWORD_EXPRESSTURN'
+                    },
+                    {
+                        urls: 'turn:free.expressturn.com:3478?transport=tcp',
+                        username: 'USERNAME_EXPRESSTURN',
+                        credential: 'PASSWORD_EXPRESSTURN'
+                    }
                 ]
             });
 
+            let inboundStream = new MediaStream();
             pc.ontrack = (event) => {
-                if (remoteVideo.srcObject !== event.streams[0]) {
-                    remoteVideo.srcObject = event.streams[0];
-                    streamStatus.style.color = '#22c55e';
-                    const labels = {
-                        camera_back: 'Live: Kamera Belakang Terhubung',
-                        camera_front: 'Live: Kamera Depan Terhubung',
-                        audio_only: 'Live: One-Way Audio Aktif',
-                        screen_mirror: 'Live: Screen Mirroring Aktif'
+                inboundStream.addTrack(event.track);
+                remoteVideo.srcObject = inboundStream;
+
+                if (event.track.kind === 'video') {
+                    remoteVideo.onloadedmetadata = () => {
+                        remoteVideo.play().catch(e => console.warn('Play video:', e));
                     };
-                    streamStatus.textContent = labels[mode] || 'Live: Terhubung';
+                } else {
+                    remoteVideo.play().catch(e => console.warn('Play audio:', e));
                 }
+
+                streamStatus.style.color = '#22c55e';
+                const labels = {
+                    camera_back: 'Live: Kamera Belakang Terhubung (Klik ikon speaker untuk suara)',
+                    camera_front: 'Live: Kamera Depan Terhubung (Klik ikon speaker untuk suara)',
+                    audio_only: 'Live: One-Way Audio Aktif (Klik ikon speaker untuk suara)',
+                    screen_mirror: 'Live: Screen Mirroring Aktif'
+                };
+                streamStatus.textContent = labels[mode] || 'Live: Terhubung';
             };
 
             pc.oniceconnectionstatechange = () => {
                 if (!pc) return;
+                console.log('ICE State:', pc.iceConnectionState);
                 if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
                     streamStatus.style.color = '#ef4444';
-                    streamStatus.textContent = 'Koneksi stream terputus.';
+                    streamStatus.textContent = 'Koneksi stream terputus (' + pc.iceConnectionState + ').';
                 }
             };
 
@@ -587,7 +607,7 @@
                 timestamp: Date.now()
             });
 
-            // Dengarkan pesan error dari HP (misal izin layar belum diberikan)
+            // Dengarkan pesan error dari HP
             errorRef = ref(db, `${webrtcBase}/error`);
             onValue(errorRef, (snapshot) => {
                 const errMsg = snapshot.val();
