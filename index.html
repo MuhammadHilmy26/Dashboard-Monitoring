@@ -435,9 +435,9 @@
         function initMap(lat = -7.4471983, lng = 112.685231) {
             if (map !== null) return;
             map = L.map('map').setView([lat, lng], 16);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 20,
-    attribution: '&copy; OpenStreetMap &copy; CARTO'
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap'
 }).addTo(map);
             marker = L.marker([lat, lng]).addTo(map).bindPopup('Lokasi Perangkat').openPopup();
         }
