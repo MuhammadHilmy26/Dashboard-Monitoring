@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Monitor — Device Dashboard</title>
+    <!-- Leaflet CSS untuk Peta Interaktif -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --border-color: #334155;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --warning: #eab308;
+            --danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Halaman Login */
+        #login-screen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .login-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 32px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        .login-card h1 {
+            font-size: 1.5rem;
+            margin-bottom: 6px;
+            color: var(--accent);
+        }
+
+        .login-card p {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-bottom: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-dark);
+            color: var(--text-main);
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        .form-group input:focus {
+            border-color: var(--accent);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: var(--accent);
+            color: #0f172a;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+
+        .error-msg {
+            color: var(--danger);
+            font-size: 0.85rem;
+            margin-top: 12px;
+            text-align: center;
+            display: none;
+        }
+
+        /* Dashboard Utama */
+        #dashboard-screen {
+            display: none;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 1.15rem;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            display: inline-block;
+        }
+
+        .status-dot.online {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        .btn-logout {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+        }
+
+        .btn-logout:hover {
+            color: var(--text-main);
+            border-color: var(--text-muted);
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 340px 1fr;
+            gap: 20px;
+            padding: 20px;
+            flex: 1;
+        }
+
+        @media (max-width: 860px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+            #map {
+                min-height: 380px;
+            }
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 18px;
+        }
+
+        .card-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .stat-box {
+            background: var(--bg-dark);
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .coord-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 0.9rem;
+        }
+
+        .coord-row:last-child {
+            border-bottom: none;
+        }
+
+        .coord-val {
+            font-family: monospace;
+            color: var(--accent);
+        }
+
+        .btn-maps {
+            display: block;
+            text-align: center;
+            text-decoration: none;
+            background: #2563eb;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-top: 14px;
+        }
+
+        .btn-maps:hover {
+            background: #1d4ed8;
+        }
+
+        /* Panel Kontrol Multimedia (Tahap WebRTC Berikutnya) */
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .btn-ctrl {
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            padding: 10px 8px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            cursor: not-allowed;
+            text-align: center;
+        }
+
+        .badge-soon {
+            display: block;
+            font-size: 0.65rem;
+            color: var(--warning);
+            margin-top: 2px;
+        }
+
+        .map-wrapper {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 450px;
+        }
+
+        #map {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LAYAR LOGIN -->
+    <div id="login-screen">
+        <div class="login-card">
+            <h1>Personal Monitor</h1>
+            <p>Masuk dengan akun Firebase terotorisasi</p>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" value="hilmyprivate@monitor.app" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" placeholder="Masukkan password akun..." required>
+                </div>
+                <button type="submit" class="btn" id="btn-login">Buka Dashboard</button>
+                <div class="error-msg" id="login-error">Email atau password salah!</div>
+            </form>
+        </div>
+    </div>
+
+    <!-- LAYAR DASHBOARD -->
+    <div id="dashboard-screen">
+        <header>
+            <div class="brand">
+                <span class="status-dot" id="conn-dot"></span>
+                <span>Personal Monitor Control</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span id="user-email-display" style="font-size: 0.85rem; color: var(--text-muted);"></span>
+                <button class="btn-logout" id="btn-logout">Keluar</button>
+            </div>
+        </header>
+
+        <div class="main-container">
+            <div class="sidebar">
+                <!-- Kartu Status Perangkat -->
+                <div class="card">
+                    <div class="card-title">Status Perangkat Real-Time</div>
+                    <div class="stat-grid">
+                        <div class="stat-box">
+                            <div class="stat-label">Baterai</div>
+                            <div class="stat-value" id="bat-val">--%</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="stat-label">Sinkronisasi</div>
+                            <div class="stat-value" id="sync-status" style="font-size: 1rem; padding-top: 4px;">Menunggu...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Kartu Koordinat GPS -->
+                <div class="card">
+                    <div class="card-title">Telemetri Lokasi GPS</div>
+                    <div class="coord-row">
+                        <span style="color: var(--text-muted);">Latitude</span>
+                        <span class="coord-val" id="lat-val">-</span>
+                    </div>
+                    <div class="coord-row">
+                        <span style="color: var(--text-muted);">Longitude</span>
+                        <span class="coord-val" id="lng-val">-</span>
+                    </div>
+                    <div class="coord-row">
+                        <span style="color: var(--text-muted);">Update Terakhir</span>
+                        <span id="time-val" style="font-size: 0.85rem;">-</span>
+                    </div>
+                    <a href="#" target="_blank" class="btn-maps" id="gmaps-link">Buka di Google Maps</a>
+                </div>
+
+                <!-- Panel Kontrol Multimedia (Siap untuk integrasi WebRTC) -->
+                <div class="card">
+                    <div class="card-title">Modul Remote Live (WebRTC)</div>
+                    <div class="control-grid">
+                        <button class="btn-ctrl" disabled>Kamera Belakang<span class="badge-soon">Tahap WebRTC</span></button>
+                        <button class="btn-ctrl" disabled>Kamera Depan<span class="badge-soon">Tahap WebRTC</span></button>
+                        <button class="btn-ctrl" disabled>One-Way Audio<span class="badge-soon">Tahap WebRTC</span></button>
+                        <button class="btn-ctrl" disabled>Screen Mirror<span class="badge-soon">Tahap WebRTC</span></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Area Peta -->
+            <div class="map-wrapper">
+                <div id="map"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Firebase SDK (Modular v11.0.2 Stabil) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBEE6iwOKTYrepZMnkdqidm6nVvnqi3LhE",
+            authDomain: "personalmonitor-fab80.firebaseapp.com",
+            databaseURL: "https://personalmonitor-fab80-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "personalmonitor-fab80",
+            storageBucket: "personalmonitor-fab80.firebasestorage.app",
+            messagingSenderId: "177121615044",
+            appId: "1:177121615044:web:59801c642c321f43e7fd91"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+
+        // Elemen UI
+        const loginScreen = document.getElementById('login-screen');
+        const dashboardScreen = document.getElementById('dashboard-screen');
+        const loginForm = document.getElementById('login-form');
+        const loginError = document.getElementById('login-error');
+        const btnLogout = document.getElementById('btn-logout');
+
+        let map = null;
+        let marker = null;
+
+        function initMap(lat = -7.4471983, lng = 112.685231) {
+            if (map !== null) return;
+            map = L.map('map').setView([lat, lng], 16);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 20,
+    attribution: '&copy; OpenStreetMap &copy; CARTO'
+}).addTo(map);
+            marker = L.marker([lat, lng]).addTo(map).bindPopup('Lokasi Perangkat').openPopup();
+        }
+
+        // Proses Login
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            loginError.style.display = 'none';
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch (err) {
+                loginError.textContent = "Login gagal: " + err.message;
+                loginError.style.display = 'block';
+            }
+        });
+
+        // Proses Logout
+        btnLogout.addEventListener('click', () => signOut(auth));
+
+        // Pantau Status Autentikasi
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                loginScreen.style.display = 'none';
+                dashboardScreen.style.display = 'flex';
+                document.getElementById('user-email-display').textContent = user.email;
+                
+                initMap();
+                setTimeout(() => { if (map) map.invalidateSize(); }, 200);
+
+                // Dengarkan perubahan data dari Realtime Database
+                const statusRef = ref(db, 'users/' + user.uid + '/device_status');
+                onValue(statusRef, (snapshot) => {
+                    const data = snapshot.val();
+                    if (!data) return;
+
+                    document.getElementById('conn-dot').classList.add('online');
+                    document.getElementById('sync-status').textContent = 'Terhubung';
+                    document.getElementById('sync-status').style.color = '#22c55e';
+
+                    // Update Baterai
+                    const batEl = document.getElementById('bat-val');
+                    batEl.textContent = data.battery + '%';
+                    batEl.style.color = data.battery <= 20 ? '#ef4444' : '#22c55e';
+
+                    // Update Koordinat & Waktu
+                    const lat = data.latitude;
+                    const lng = data.longitude;
+                    document.getElementById('lat-val').textContent = lat.toFixed(6);
+                    document.getElementById('lng-val').textContent = lng.toFixed(6);
+
+                    if (data.last_updated) {
+                        const date = new Date(data.last_updated);
+                        document.getElementById('time-val').textContent = date.toLocaleTimeString('id-ID') + ' WIB';
+                    }
+
+                    // Update Link Google Maps
+                    document.getElementById('gmaps-link').href = `https://www.google.com/maps?q=${lat},${lng}`;
+
+                    // Pindahkan Pin Peta secara Real-Time
+                    if (map && marker) {
+                        const newLatLng = [lat, lng];
+                        marker.setLatLng(newLatLng);
+                        map.panTo(newLatLng);
+                    }
+                });
+            } else {
+                loginScreen.style.display = 'flex';
+                dashboardScreen.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
