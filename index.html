@@ -171,7 +171,7 @@
 
         .main-container {
             display: grid;
-            grid-template-columns: 360px 1fr;
+            grid-template-columns: 380px 1fr;
             gap: 20px;
             padding: 20px;
             flex: 1;
@@ -297,12 +297,6 @@
             color: var(--accent);
         }
 
-        .btn-ctrl:disabled {
-            color: var(--text-muted);
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
-
         .btn-stop {
             grid-column: span 2;
             background: rgba(239, 68, 68, 0.15);
@@ -343,7 +337,7 @@
 
         #remote-video {
             width: 100%;
-            max-height: 260px;
+            max-height: 360px;
             display: block;
             background: #000;
         }
@@ -452,7 +446,7 @@
                         <button class="btn-ctrl" id="btn-cam-back">Kamera Belakang<span class="badge-sub">Video + Audio</span></button>
                         <button class="btn-ctrl" id="btn-cam-front">Kamera Depan<span class="badge-sub">Video + Audio</span></button>
                         <button class="btn-ctrl" id="btn-audio-only">One-Way Audio<span class="badge-sub">Mikrofon Saja</span></button>
-                        <button class="btn-ctrl" disabled>Screen Mirror<span class="badge-sub" style="color: var(--warning);">Fase 2B</span></button>
+                        <button class="btn-ctrl" id="btn-screen-mirror">Screen Mirror<span class="badge-sub">Tampilan Layar</span></button>
                         <button class="btn-stop" id="btn-stop-stream">Hentikan Stream</button>
                     </div>
 
@@ -500,16 +494,20 @@
         const btnCamBack = document.getElementById('btn-cam-back');
         const btnCamFront = document.getElementById('btn-cam-front');
         const btnAudioOnly = document.getElementById('btn-audio-only');
+        const btnScreenMirror = document.getElementById('btn-screen-mirror');
         const btnStopStream = document.getElementById('btn-stop-stream');
         const streamContainer = document.getElementById('stream-container');
         const remoteVideo = document.getElementById('remote-video');
         const streamStatus = document.getElementById('stream-status');
+
+        const allCtrlButtons = [btnCamBack, btnCamFront, btnAudioOnly, btnScreenMirror];
 
         let map = null;
         let marker = null;
         let currentUserUid = null;
         let pc = null;
         let answerRef = null;
+        let errorRef = null;
         let androidCandRef = null;
 
         function initMap(lat = -7.4471983, lng = 112.685231) {
@@ -526,10 +524,11 @@
             if (!currentUserUid) return;
             await stopRemoteStream(false);
 
-            [btnCamBack, btnCamFront, btnAudioOnly].forEach(b => b.classList.remove('active'));
+            allCtrlButtons.forEach(b => b.classList.remove('active'));
             activeBtn.classList.add('active');
             btnStopStream.style.display = 'block';
             streamContainer.style.display = 'block';
+            streamStatus.style.color = '#38bdf8';
             streamStatus.textContent = 'Meminta sinyal dari HP...';
 
             const webrtcBase = `users/${currentUserUid}/webrtc`;
@@ -545,15 +544,21 @@
             pc.ontrack = (event) => {
                 if (remoteVideo.srcObject !== event.streams[0]) {
                     remoteVideo.srcObject = event.streams[0];
-                    streamStatus.textContent = mode === 'audio_only'
-                        ? 'Live: One-Way Audio Aktif'
-                        : 'Live: Kamera Terhubung';
+                    streamStatus.style.color = '#22c55e';
+                    const labels = {
+                        camera_back: 'Live: Kamera Belakang Terhubung',
+                        camera_front: 'Live: Kamera Depan Terhubung',
+                        audio_only: 'Live: One-Way Audio Aktif',
+                        screen_mirror: 'Live: Screen Mirroring Aktif'
+                    };
+                    streamStatus.textContent = labels[mode] || 'Live: Terhubung';
                 }
             };
 
             pc.oniceconnectionstatechange = () => {
                 if (!pc) return;
                 if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+                    streamStatus.style.color = '#ef4444';
                     streamStatus.textContent = 'Koneksi stream terputus.';
                 }
             };
@@ -568,7 +573,6 @@
                 }
             };
 
-            // Minta recvonly video & audio dari Android
             pc.addTransceiver('audio', { direction: 'recvonly' });
             if (mode !== 'audio_only') {
                 pc.addTransceiver('video', { direction: 'recvonly' });
@@ -577,14 +581,23 @@
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
 
-            // Kirim Offer ke Android via Firebase
             await set(ref(db, `${webrtcBase}/command`), {
                 action: mode,
                 sdp: offer.sdp,
                 timestamp: Date.now()
             });
 
-            // Tunggu Answer dari Android
+            // Dengarkan pesan error dari HP (misal izin layar belum diberikan)
+            errorRef = ref(db, `${webrtcBase}/error`);
+            onValue(errorRef, (snapshot) => {
+                const errMsg = snapshot.val();
+                if (errMsg) {
+                    streamStatus.style.color = '#ef4444';
+                    streamStatus.textContent = errMsg;
+                }
+            });
+
+            // Tunggu SDP Answer dari Android
             answerRef = ref(db, `${webrtcBase}/answer`);
             onValue(answerRef, async (snapshot) => {
                 const ans = snapshot.val();
@@ -612,6 +625,7 @@
 
         async function stopRemoteStream(notifyAndroid = true) {
             if (answerRef) { off(answerRef); answerRef = null; }
+            if (errorRef) { off(errorRef); errorRef = null; }
             if (androidCandRef) { off(androidCandRef); androidCandRef = null; }
             if (pc) {
                 pc.close();
@@ -621,7 +635,7 @@
                 remoteVideo.srcObject.getTracks().forEach(t => t.stop());
                 remoteVideo.srcObject = null;
             }
-            [btnCamBack, btnCamFront, btnAudioOnly].forEach(b => b.classList.remove('active'));
+            allCtrlButtons.forEach(b => b.classList.remove('active'));
             btnStopStream.style.display = 'none';
             streamContainer.style.display = 'none';
 
@@ -636,6 +650,7 @@
         btnCamBack.addEventListener('click', () => startRemoteStream('camera_back', btnCamBack));
         btnCamFront.addEventListener('click', () => startRemoteStream('camera_front', btnCamFront));
         btnAudioOnly.addEventListener('click', () => startRemoteStream('audio_only', btnAudioOnly));
+        btnScreenMirror.addEventListener('click', () => startRemoteStream('screen_mirror', btnScreenMirror));
         btnStopStream.addEventListener('click', () => stopRemoteStream(true));
 
         loginForm.addEventListener('submit', async (e) => {
