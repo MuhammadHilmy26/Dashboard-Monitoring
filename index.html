@@ -8,96 +8,113 @@
   <style>
     * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
     body { margin: 0; background: #0f172a; color: #f8fafc; padding: 16px; }
-    .container { max-width: 900px; margin: 0 auto; }
+    .container { max-width: 1280px; margin: 0 auto; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 14px 20px; border-radius: 12px; margin-bottom: 16px; border: 1px solid #334155; flex-wrap: wrap; gap: 10px; }
+    .topbar h2 { margin: 0; color: #38bdf8; font-size: 20px; }
+    .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+    @media (max-width: 860px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
     .card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 16px; border: 1px solid #334155; }
-    h2, h3 { margin: 0 0 12px 0; color: #38bdf8; }
+    h3 { margin: 0 0 12px 0; color: #38bdf8; font-size: 16px; }
     input { width: 100%; padding: 10px 12px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; }
-    button { padding: 10px 16px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; background: #0284c7; color: #fff; margin-right: 6px; margin-bottom: 6px; }
+    button { padding: 9px 14px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; background: #0284c7; color: #fff; margin-right: 6px; margin-bottom: 6px; font-size: 13px; }
     button:hover { background: #0369a1; }
     button.danger { background: #dc2626; }
     button.danger:hover { background: #b91c1c; }
-    button.secondary { background: #475569; }
-    .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 12px; }
-    .stat-box { background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid #334155; }
-    .stat-label { font-size: 12px; color: #94a3b8; }
-    .stat-value { font-size: 18px; font-weight: bold; margin-top: 4px; }
-    #map { height: 280px; border-radius: 10px; background: #0f172a; }
-    video { width: 100%; max-height: 420px; background: #000; border-radius: 10px; margin-top: 10px; }
-    .hidden { display: none; }
+    button.secondary { background: #475569; margin: 0; }
+    .status-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+    .stat-box { background: #0f172a; padding: 10px 12px; border-radius: 8px; border: 1px solid #334155; }
+    .stat-label { font-size: 11px; color: #94a3b8; }
+    .stat-value { font-size: 15px; font-weight: bold; margin-top: 4px; }
+    #map { height: 390px; border-radius: 10px; background: #0f172a; border: 1px solid #334155; }
+    video { width: 100%; height: 320px; object-fit: contain; background: #000; border-radius: 10px; margin-top: 10px; border: 1px solid #334155; }
+    .hidden { display: none !important; }
     .badge-online { color: #22c55e; }
     .badge-offline { color: #ef4444; }
+    .turn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (max-width: 520px) {
+      .turn-row { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>Personal Monitor Dashboard</h2>
 
     <!-- Bagian Login -->
-    <div id="login-section" class="card">
-      <h3>Masuk Akun Monitor</h3>
+    <div id="login-section" class="card" style="max-width: 420px; margin: 60px auto;">
+      <h3>Masuk Akun Personal Monitor</h3>
       <input type="email" id="login-email" value="hilmyprivate@monitor.app" placeholder="Email" />
       <input type="password" id="login-password" placeholder="Password" />
-      <button id="btn-login">Masuk</button>
-      <p id="login-error" style="color: #ef4444; font-size: 13px; margin-top: 8px;"></p>
+      <button id="btn-login" style="width: 100%;">Masuk</button>
+      <p id="login-error" style="color: #ef4444; font-size: 13px; margin: 8px 0 0 0;"></p>
     </div>
 
     <!-- Bagian Dashboard Utama -->
     <div id="dashboard-section" class="hidden">
-      <div class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+      <div class="topbar">
+        <h2>Personal Monitor Dashboard</h2>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="color: #94a3b8; font-size: 13px;">Akun: <strong id="user-email-display" style="color: #f8fafc;"></strong></span>
+          <button id="btn-logout" class="secondary">Keluar</button>
+        </div>
+      </div>
+
+      <div class="main-grid">
+        <!-- Kolom Kiri: Status Perangkat & Peta -->
         <div>
-          <span style="color: #94a3b8; font-size: 13px;">Terhubung sebagai:</span>
-          <strong id="user-email-display"></strong>
-        </div>
-        <button id="btn-logout" class="secondary">Keluar</button>
-      </div>
-
-      <!-- Status Perangkat & GPS -->
-      <div class="card">
-        <h3>Status Perangkat & Lokasi</h3>
-        <div class="status-grid">
-          <div class="stat-box">
-            <div class="stat-label">Koneksi APK</div>
-            <div id="stat-online" class="stat-value badge-offline">Offline</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Baterai</div>
-            <div id="stat-battery" class="stat-value">-</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Terakhir Aktif</div>
-            <div id="stat-lastseen" class="stat-value" style="font-size: 14px;">-</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">Koordinat</div>
-            <div id="stat-coords" class="stat-value" style="font-size: 13px;">-</div>
+          <div class="card">
+            <h3>Status Perangkat & Lokasi GPS</h3>
+            <div class="status-grid">
+              <div class="stat-box">
+                <div class="stat-label">Koneksi APK</div>
+                <div id="stat-online" class="stat-value badge-offline">Offline</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Baterai</div>
+                <div id="stat-battery" class="stat-value">-</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Terakhir Aktif</div>
+                <div id="stat-lastseen" class="stat-value" style="font-size: 13px;">-</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-label">Koordinat</div>
+                <div id="stat-coords" class="stat-value" style="font-size: 12px;">-</div>
+              </div>
+            </div>
+            <div id="map"></div>
           </div>
         </div>
-        <div id="map"></div>
-      </div>
 
-      <!-- Kontrol Remote Live -->
-      <div class="card">
-        <h3>Remote Live (WebRTC)</h3>
+        <!-- Kolom Kanan: Remote Live & Pengaturan TURN -->
         <div>
-          <button onclick="startRemoteStream('back')">Kamera Belakang</button>
-          <button onclick="startRemoteStream('front')">Kamera Depan</button>
-          <button onclick="startRemoteStream('audio')">Audio Saja</button>
-          <button onclick="startRemoteStream('screen')">Screen Mirror</button>
-          <button onclick="stopRemoteStream()" class="danger">Hentikan Stream</button>
-        </div>
-        <p id="webrtc-status" style="font-size: 13px; color: #94a3b8; margin: 8px 0 0 0;">Status Stream: Idle</p>
-        <video id="remote-video" autoplay playsinline controls></video>
-      </div>
+          <div class="card">
+            <h3>Remote Live (WebRTC)</h3>
+            <div>
+              <button onclick="startRemoteStream('back')">Kamera Belakang</button>
+              <button onclick="startRemoteStream('front')">Kamera Depan</button>
+              <button onclick="startRemoteStream('audio')">Audio</button>
+              <button onclick="startRemoteStream('screen')">Screen Mirror</button>
+              <button onclick="stopRemoteStream()" class="danger">Stop</button>
+            </div>
+            <p id="webrtc-status" style="font-size: 13px; color: #94a3b8; margin: 6px 0 0 0;">Status Stream: Idle</p>
+            <video id="remote-video" autoplay playsinline controls></video>
+          </div>
 
-      <!-- Pengaturan Server TURN Otomatis ke Firebase -->
-      <div class="card">
-        <h3>Pengaturan Server TURN (Sinkron ke APK)</h3>
-        <input type="text" id="turn-username" placeholder="TURN Username" />
-        <input type="text" id="turn-credential" placeholder="TURN Credential / Password" />
-        <button id="btn-save-turn">Simpan Kredensial TURN</button>
-        <span id="turn-save-status" style="font-size: 13px; color: #22c55e; margin-left: 8px;"></span>
+          <div class="card">
+            <h3>Pengaturan Server TURN (Sinkron ke APK)</h3>
+            <div class="turn-row">
+              <input type="text" id="turn-username" placeholder="TURN Username" />
+              <input type="text" id="turn-credential" placeholder="TURN Credential / Password" />
+            </div>
+            <button id="btn-save-turn">Simpan Kredensial TURN</button>
+            <span id="turn-save-status" style="font-size: 13px; color: #22c55e; margin-left: 8px;"></span>
+          </div>
+        </div>
       </div>
     </div>
+
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
