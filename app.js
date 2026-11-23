@@ -16,6 +16,7 @@ let currentUid = null;
 let map = null;
 let marker = null;
 let peerConnection = null;
+let activeTurnUrl = "";
 let activeTurnUser = "";
 let activeTurnPass = "";
 
@@ -104,23 +105,29 @@ function listenDeviceStatus(uid) {
   });
 }
 
-// Baca & Simpan TURN dari/ke Firebase (config/turn)
+// Baca & Simpan TURN (URL, Username, Credential) dari/ke Firebase (config/turn)
 function initTurnSettings() {
   const turnRef = db.ref("config/turn");
   turnRef.on("value", (snap) => {
     const val = snap.val() || {};
+    activeTurnUrl = val.url || "turn:free.expressturn.com:3478";
     activeTurnUser = val.username || "";
     activeTurnPass = val.credential || "";
+
+    const urlInput = document.getElementById("turn-url");
+    if (urlInput) urlInput.value = activeTurnUrl;
     document.getElementById("turn-username").value = activeTurnUser;
     document.getElementById("turn-credential").value = activeTurnPass;
   });
 
   document.getElementById("btn-save-turn").onclick = () => {
+    const urlInput = document.getElementById("turn-url");
+    const url = urlInput ? urlInput.value.trim() : "turn:free.expressturn.com:3478";
     const username = document.getElementById("turn-username").value.trim();
     const credential = document.getElementById("turn-credential").value.trim();
     const statusEl = document.getElementById("turn-save-status");
 
-    turnRef.set({ username, credential })
+    turnRef.set({ url, username, credential })
       .then(() => {
         statusEl.style.color = "#22c55e";
         statusEl.textContent = "Tersimpan & sinkron!";
@@ -145,14 +152,18 @@ async function startRemoteStream(mode) {
   await webrtcRef.remove();
 
   const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
-  if (activeTurnUser && activeTurnPass) {
-    iceServers.push(
-      { urls: "turn:a.relay.metered.ca:80", username: activeTurnUser, credential: activeTurnPass },
-      { urls: "turn:a.relay.metered.ca:443?transport=tcp", username: activeTurnUser, credential: activeTurnPass }
-    );
+  if (activeTurnUrl && activeTurnUser && activeTurnPass) {
+    iceServers.push({
+      urls: activeTurnUrl,
+      username: activeTurnUser,
+      credential: activeTurnPass
+    });
   }
 
   peerConnection = new RTCPeerConnection({ iceServers });
+  let remoteDescSet = false;
+  let pendingCandidates = [];
+
   peerConnection.addTransceiver("video", { direction: "recvonly" });
   peerConnection.addTransceiver("audio", { direction: "recvonly" });
 
@@ -184,20 +195,39 @@ async function startRemoteStream(mode) {
 
   webrtcRef.child("answer").on("value", async (snap) => {
     const ans = snap.val();
-    if (ans && ans.sdp && peerConnection && !peerConnection.currentRemoteDescription) {
+    if (ans && ans.sdp && peerConnection && !remoteDescSet) {
       await peerConnection.setRemoteDescription(new RTCSessionDescription({
         type: "answer",
         sdp: ans.sdp
       }));
+      remoteDescSet = true;
+      for (const cand of pendingCandidates) {
+        await pcAddIceCandidateSafe(cand);
+      }
+      pendingCandidates = [];
     }
   });
 
   webrtcRef.child("androidCandidates").on("child_added", async (snap) => {
     const cand = snap.val();
     if (cand && cand.candidate && peerConnection) {
-      await peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+      if (remoteDescSet) {
+        await pcAddIceCandidateSafe(cand);
+      } else {
+        pendingCandidates.push(cand);
+      }
     }
   });
+}
+
+async function pcAddIceCandidateSafe(cand) {
+  try {
+    if (peerConnection) {
+      await peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+    }
+  } catch (e) {
+    console.warn("ICE candidate dilewati:", e);
+  }
 }
 
 async function stopRemoteStream() {
