@@ -1,274 +1,217 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-import { getDatabase, ref, onValue, set, remove, onChildAdded, off, get } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-database.js";
-
 const firebaseConfig = {
-    apiKey: "AIzaSyBEE6iwOKTYrepZMnkdqidm6nVvnqi3LhE",
-    authDomain: "personalmonitor-fab80.firebaseapp.com",
-    databaseURL: "https://personalmonitor-fab80-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "personalmonitor-fab80",
-    storageBucket: "personalmonitor-fab80.firebasestorage.app",
-    messagingSenderId: "177121615044",
-    appId: "1:177121615044:web:59801c642c321f43e7fd91"
+  apiKey: "AIzaSyDV0rV5BQUugkFSViXrmvkXnC1OtgAlDAo",
+  authDomain: "personalmonitor-fab80.firebaseapp.com",
+  databaseURL: "https://personalmonitor-fab80-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "personalmonitor-fab80",
+  storageBucket: "personalmonitor-fab80.firebasestorage.app",
+  messagingSenderId: "177121615044",
+  appId: "1:177121615044:web:7fd7c333f601d14fe7fd91"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getDatabase(app);
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
 
-const loginScreen = document.getElementById('login-screen');
-const dashboardScreen = document.getElementById('dashboard-screen');
-const loginForm = document.getElementById('login-form');
-const loginError = document.getElementById('login-error');
-const btnLogout = document.getElementById('btn-logout');
-
-const btnCamBack = document.getElementById('btn-cam-back');
-const btnCamFront = document.getElementById('btn-cam-front');
-const btnAudioOnly = document.getElementById('btn-audio-only');
-const btnScreenMirror = document.getElementById('btn-screen-mirror');
-const btnStopStream = document.getElementById('btn-stop-stream');
-const streamContainer = document.getElementById('stream-container');
-const remoteVideo = document.getElementById('remote-video');
-const streamStatus = document.getElementById('stream-status');
-
-const allCtrlButtons = [btnCamBack, btnCamFront, btnAudioOnly, btnScreenMirror];
-
+let currentUid = null;
 let map = null;
 let marker = null;
-let currentUserUid = null;
-let pc = null;
-let answerRef = null;
-let errorRef = null;
-let androidCandRef = null;
+let peerConnection = null;
+let activeTurnUser = "";
+let activeTurnPass = "";
 
-function initMap(lat = -7.4471983, lng = 112.685231) {
-    if (map !== null) return;
-    map = L.map('map').setView([lat, lng], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
-    marker = L.marker([lat, lng]).addTo(map).bindPopup('Lokasi Perangkat').openPopup();
-}
+// Elemen UI
+const loginSection = document.getElementById("login-section");
+const dashboardSection = document.getElementById("dashboard-section");
+const loginError = document.getElementById("login-error");
 
-async function startRemoteStream(mode, activeBtn) {
-    if (!currentUserUid) return;
-    await stopRemoteStream(false);
+document.getElementById("btn-login").addEventListener("click", () => {
+  const email = document.getElementById("login-email").value.trim();
+  const pass = document.getElementById("login-password").value.trim();
+  loginError.textContent = "";
 
-    allCtrlButtons.forEach(b => b.classList.remove('active'));
-    activeBtn.classList.add('active');
-    btnStopStream.style.display = 'block';
-    streamContainer.style.display = 'block';
-    streamStatus.style.color = '#38bdf8';
-    streamStatus.textContent = 'Mengambil konfigurasi jaringan & meminta sinyal HP...';
-
-    const webrtcBase = `users/${currentUserUid}/webrtc`;
-    await remove(ref(db, webrtcBase));
-
-    // Ambil konfigurasi TURN secara dinamis dari Firebase
-    const turnSnap = await get(ref(db, `users/${currentUserUid}/turn_config`));
-    const turnData = turnSnap.val() || {};
-
-    const iceServers = [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:free.expressturn.com:3478' }
-    ];
-
-    if (turnData.username && turnData.password) {
-        iceServers.push(
-            {
-                urls: turnData.url_udp || 'turn:free.expressturn.com:3478?transport=udp',
-                username: turnData.username,
-                credential: turnData.password
-            },
-            {
-                urls: turnData.url_tcp || 'turn:free.expressturn.com:3478?transport=tcp',
-                username: turnData.username,
-                credential: turnData.password
-            }
-        );
-    }
-
-    pc = new RTCPeerConnection({ iceServers });
-
-    let inboundStream = new MediaStream();
-    pc.ontrack = (event) => {
-        inboundStream.addTrack(event.track);
-        remoteVideo.srcObject = inboundStream;
-        remoteVideo.muted = false;
-
-        remoteVideo.play().catch(e => {
-            console.warn('Autoplay dengan suara diblokir, fallback muted:', e);
-            remoteVideo.muted = true;
-            remoteVideo.play();
-        });
-
-        streamStatus.style.color = '#22c55e';
-        const labels = {
-            camera_back: 'Live: Kamera Belakang Terhubung',
-            camera_front: 'Live: Kamera Depan Terhubung',
-            audio_only: 'Live: One-Way Audio Aktif',
-            screen_mirror: 'Live: Screen Mirroring Aktif'
-        };
-        streamStatus.textContent = labels[mode] || 'Live: Terhubung';
-    };
-
-    pc.oniceconnectionstatechange = () => {
-        if (!pc) return;
-        console.log('ICE State:', pc.iceConnectionState);
-        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-            streamStatus.style.color = '#ef4444';
-            streamStatus.textContent = 'Koneksi stream terputus (' + pc.iceConnectionState + ').';
-        }
-    };
-
-    pc.onicecandidate = (event) => {
-        if (event.candidate) {
-            set(ref(db, `${webrtcBase}/web_candidates/${Date.now()}_${Math.floor(Math.random()*1000)}`), {
-                sdpMid: event.candidate.sdpMid,
-                sdpMLineIndex: event.candidate.sdpMLineIndex,
-                candidate: event.candidate.candidate
-            });
-        }
-    };
-
-    pc.addTransceiver('audio', { direction: 'recvonly' });
-    if (mode !== 'audio_only') {
-        pc.addTransceiver('video', { direction: 'recvonly' });
-    }
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    await set(ref(db, `${webrtcBase}/command`), {
-        action: mode,
-        sdp: offer.sdp,
-        timestamp: Date.now()
+  auth.signInWithEmailAndPassword(email, pass)
+    .catch((err) => {
+      loginError.textContent = "Gagal masuk: " + err.message;
     });
-
-    errorRef = ref(db, `${webrtcBase}/error`);
-    onValue(errorRef, (snapshot) => {
-        const errMsg = snapshot.val();
-        if (errMsg) {
-            streamStatus.style.color = '#ef4444';
-            streamStatus.textContent = errMsg;
-        }
-    });
-
-    answerRef = ref(db, `${webrtcBase}/answer`);
-    onValue(answerRef, async (snapshot) => {
-        const ans = snapshot.val();
-        if (ans && ans.sdp && pc && !pc.currentRemoteDescription) {
-            await pc.setRemoteDescription(new RTCSessionDescription({
-                type: 'answer',
-                sdp: ans.sdp
-            }));
-        }
-    });
-
-    androidCandRef = ref(db, `${webrtcBase}/android_candidates`);
-    onChildAdded(androidCandRef, async (snapshot) => {
-        const cand = snapshot.val();
-        if (cand && cand.candidate && pc) {
-            try {
-                await pc.addIceCandidate(new RTCIceCandidate(cand));
-            } catch (e) {
-                console.error('ICE Error:', e);
-            }
-        }
-    });
-}
-
-async function stopRemoteStream(notifyAndroid = true) {
-    if (answerRef) { off(answerRef); answerRef = null; }
-    if (errorRef) { off(errorRef); errorRef = null; }
-    if (androidCandRef) { off(androidCandRef); androidCandRef = null; }
-    if (pc) {
-        pc.close();
-        pc = null;
-    }
-    if (remoteVideo.srcObject) {
-        remoteVideo.srcObject.getTracks().forEach(t => t.stop());
-        remoteVideo.srcObject = null;
-    }
-    allCtrlButtons.forEach(b => b.classList.remove('active'));
-    btnStopStream.style.display = 'none';
-    streamContainer.style.display = 'none';
-
-    if (notifyAndroid && currentUserUid) {
-        await remove(ref(db, `users/${currentUserUid}/webrtc`));
-    }
-}
-
-btnCamBack.addEventListener('click', () => startRemoteStream('camera_back', btnCamBack));
-btnCamFront.addEventListener('click', () => startRemoteStream('camera_front', btnCamFront));
-btnAudioOnly.addEventListener('click', () => startRemoteStream('audio_only', btnAudioOnly));
-btnScreenMirror.addEventListener('click', () => startRemoteStream('screen_mirror', btnScreenMirror));
-btnStopStream.addEventListener('click', () => stopRemoteStream(true));
-
-loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    loginError.style.display = 'none';
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-
-    try {
-        await signInWithEmailAndPassword(auth, email, password);
-    } catch (err) {
-        loginError.textContent = "Login gagal: " + err.message;
-        loginError.style.display = 'block';
-    }
 });
 
-btnLogout.addEventListener('click', async () => {
-    await stopRemoteStream(true);
-    signOut(auth);
+document.getElementById("btn-logout").addEventListener("click", () => {
+  stopRemoteStream();
+  auth.signOut();
 });
 
-onAuthStateChanged(auth, (user) => {
-    if (user) {
-        currentUserUid = user.uid;
-        loginScreen.style.display = 'none';
-        dashboardScreen.style.display = 'flex';
-        document.getElementById('user-email-display').textContent = user.email;
+auth.onAuthStateChanged((user) => {
+  if (user) {
+    currentUid = user.uid;
+    document.getElementById("user-email-display").textContent = user.email;
+    loginSection.classList.add("hidden");
+    dashboardSection.classList.remove("hidden");
+    initMap();
+    listenDeviceStatus(user.uid);
+    initTurnSettings();
+  } else {
+    currentUid = null;
+    loginSection.classList.remove("hidden");
+    dashboardSection.classList.add("hidden");
+  }
+});
 
-        initMap();
-        setTimeout(() => { if (map) map.invalidateSize(); }, 200);
+function initMap() {
+  if (map) return;
+  map = L.map("map").setView([-7.2575, 112.7521], 13);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: "&copy; OpenStreetMap"
+  }).addTo(map);
+}
 
-        const statusRef = ref(db, 'users/' + user.uid + '/device_status');
-        onValue(statusRef, (snapshot) => {
-            const data = snapshot.val();
-            if (!data) return;
+function listenDeviceStatus(uid) {
+  db.ref(`users/${uid}/device_status`).on("value", (snap) => {
+    const data = snap.val();
+    if (!data) return;
 
-            document.getElementById('conn-dot').classList.add('online');
-            document.getElementById('sync-status').textContent = 'Terhubung';
-            document.getElementById('sync-status').style.color = '#22c55e';
-
-            const batEl = document.getElementById('bat-val');
-            batEl.textContent = data.battery + '%';
-            batEl.style.color = data.battery <= 20 ? '#ef4444' : '#22c55e';
-
-            const lat = data.latitude;
-            const lng = data.longitude;
-            document.getElementById('lat-val').textContent = lat.toFixed(6);
-            document.getElementById('lng-val').textContent = lng.toFixed(6);
-
-            if (data.last_updated) {
-                const date = new Date(data.last_updated);
-                document.getElementById('time-val').textContent = date.toLocaleTimeString('id-ID') + ' WIB';
-            }
-
-            document.getElementById('gmaps-link').href = `https://www.google.com/maps?q=${lat},${lng}`;
-
-            if (map && marker) {
-                const newLatLng = [lat, lng];
-                marker.setLatLng(newLatLng);
-                map.panTo(newLatLng);
-            }
-        });
+    const onlineEl = document.getElementById("stat-online");
+    if (data.online) {
+      onlineEl.textContent = "Online";
+      onlineEl.className = "stat-value badge-online";
     } else {
-        currentUserUid = null;
-        loginScreen.style.display = 'flex';
-        dashboardScreen.style.display = 'none';
+      onlineEl.textContent = "Offline";
+      onlineEl.className = "stat-value badge-offline";
     }
-});
+
+    document.getElementById("stat-battery").textContent =
+      data.battery !== undefined ? `${data.battery}%` : "-";
+
+    if (data.last_seen) {
+      document.getElementById("stat-lastseen").textContent =
+        new Date(data.last_seen).toLocaleString("id-ID");
+    }
+
+    if (data.latitude && data.longitude) {
+      const lat = data.latitude;
+      const lng = data.longitude;
+      document.getElementById("stat-coords").textContent =
+        `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+      if (map) {
+        if (!marker) {
+          marker = L.marker([lat, lng]).addTo(map);
+        } else {
+          marker.setLatLng([lat, lng]);
+        }
+        map.setView([lat, lng], 16);
+      }
+    }
+  });
+}
+
+// Baca & Simpan TURN dari/ke Firebase (config/turn)
+function initTurnSettings() {
+  const turnRef = db.ref("config/turn");
+  turnRef.on("value", (snap) => {
+    const val = snap.val() || {};
+    activeTurnUser = val.username || "";
+    activeTurnPass = val.credential || "";
+    document.getElementById("turn-username").value = activeTurnUser;
+    document.getElementById("turn-credential").value = activeTurnPass;
+  });
+
+  document.getElementById("btn-save-turn").onclick = () => {
+    const username = document.getElementById("turn-username").value.trim();
+    const credential = document.getElementById("turn-credential").value.trim();
+    const statusEl = document.getElementById("turn-save-status");
+
+    turnRef.set({ username, credential })
+      .then(() => {
+        statusEl.style.color = "#22c55e";
+        statusEl.textContent = "Tersimpan & sinkron!";
+        setTimeout(() => { statusEl.textContent = ""; }, 3000);
+      })
+      .catch((err) => {
+        statusEl.style.color = "#ef4444";
+        statusEl.textContent = "Gagal simpan: " + err.message;
+      });
+  };
+}
+
+// Kontrol WebRTC
+async function startRemoteStream(mode) {
+  if (!currentUid) return;
+  await stopRemoteStream();
+
+  const statusEl = document.getElementById("webrtc-status");
+  statusEl.textContent = `Status Stream: Meminta akses (${mode})...`;
+
+  const webrtcRef = db.ref(`users/${currentUid}/webrtc`);
+  await webrtcRef.remove();
+
+  const iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
+  if (activeTurnUser && activeTurnPass) {
+    iceServers.push(
+      { urls: "turn:a.relay.metered.ca:80", username: activeTurnUser, credential: activeTurnPass },
+      { urls: "turn:a.relay.metered.ca:443?transport=tcp", username: activeTurnUser, credential: activeTurnPass }
+    );
+  }
+
+  peerConnection = new RTCPeerConnection({ iceServers });
+  peerConnection.addTransceiver("video", { direction: "recvonly" });
+  peerConnection.addTransceiver("audio", { direction: "recvonly" });
+
+  peerConnection.ontrack = (event) => {
+    const videoEl = document.getElementById("remote-video");
+    if (event.streams && event.streams[0]) {
+      videoEl.srcObject = event.streams[0];
+    }
+    statusEl.textContent = `Status Stream: Terhubung (${mode})`;
+  };
+
+  peerConnection.onicecandidate = (event) => {
+    if (event.candidate) {
+      webrtcRef.child("webCandidates").push({
+        candidate: event.candidate.candidate,
+        sdpMid: event.candidate.sdpMid,
+        sdpMLineIndex: event.candidate.sdpMLineIndex
+      });
+    }
+  };
+
+  const offer = await peerConnection.createOffer();
+  await peerConnection.setLocalDescription(offer);
+
+  await webrtcRef.child("offer").set({
+    sdp: offer.sdp,
+    mode: mode
+  });
+
+  webrtcRef.child("answer").on("value", async (snap) => {
+    const ans = snap.val();
+    if (ans && ans.sdp && peerConnection && !peerConnection.currentRemoteDescription) {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription({
+        type: "answer",
+        sdp: ans.sdp
+      }));
+    }
+  });
+
+  webrtcRef.child("androidCandidates").on("child_added", async (snap) => {
+    const cand = snap.val();
+    if (cand && cand.candidate && peerConnection) {
+      await peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+    }
+  });
+}
+
+async function stopRemoteStream() {
+  if (currentUid) {
+    const webrtcRef = db.ref(`users/${currentUid}/webrtc`);
+    webrtcRef.child("answer").off();
+    webrtcRef.child("androidCandidates").off();
+    await webrtcRef.remove();
+  }
+  if (peerConnection) {
+    peerConnection.close();
+    peerConnection = null;
+  }
+  const videoEl = document.getElementById("remote-video");
+  if (videoEl) videoEl.srcObject = null;
+  document.getElementById("webrtc-status").textContent = "Status Stream: Idle";
+}
