@@ -1,108 +1,109 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Personal Monitor — Device Dashboard</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personal Monitor - Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { margin: 0; background: #0f172a; color: #f8fafc; padding: 16px; }
+    .container { max-width: 900px; margin: 0 auto; }
+    .card { background: #1e293b; border-radius: 12px; padding: 16px; margin-bottom: 16px; border: 1px solid #334155; }
+    h2, h3 { margin: 0 0 12px 0; color: #38bdf8; }
+    input { width: 100%; padding: 10px 12px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; }
+    button { padding: 10px 16px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; background: #0284c7; color: #fff; margin-right: 6px; margin-bottom: 6px; }
+    button:hover { background: #0369a1; }
+    button.danger { background: #dc2626; }
+    button.danger:hover { background: #b91c1c; }
+    button.secondary { background: #475569; }
+    .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .stat-box { background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid #334155; }
+    .stat-label { font-size: 12px; color: #94a3b8; }
+    .stat-value { font-size: 18px; font-weight: bold; margin-top: 4px; }
+    #map { height: 280px; border-radius: 10px; background: #0f172a; }
+    video { width: 100%; max-height: 420px; background: #000; border-radius: 10px; margin-top: 10px; }
+    .hidden { display: none; }
+    .badge-online { color: #22c55e; }
+    .badge-offline { color: #ef4444; }
+  </style>
 </head>
 <body>
+  <div class="container">
+    <h2>Personal Monitor Dashboard</h2>
 
-    <!-- LAYAR LOGIN -->
-    <div id="login-screen">
-        <div class="login-card">
-            <h1>Personal Monitor</h1>
-            <p>Masuk dengan akun Firebase terotorisasi</p>
-            <form id="login-form">
-                <div class="form-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" value="hilmyprivate@monitor.app" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" placeholder="Masukkan password akun..." required>
-                </div>
-                <button type="submit" class="btn" id="btn-login">Buka Dashboard</button>
-                <div class="error-msg" id="login-error">Email atau password salah!</div>
-            </form>
-        </div>
+    <!-- Bagian Login -->
+    <div id="login-section" class="card">
+      <h3>Masuk Akun Monitor</h3>
+      <input type="email" id="login-email" value="hilmyprivate@monitor.app" placeholder="Email" />
+      <input type="password" id="login-password" placeholder="Password" />
+      <button id="btn-login">Masuk</button>
+      <p id="login-error" style="color: #ef4444; font-size: 13px; margin-top: 8px;"></p>
     </div>
 
-    <!-- LAYAR DASHBOARD -->
-    <div id="dashboard-screen">
-        <header>
-            <div class="brand">
-                <span class="status-dot" id="conn-dot"></span>
-                <span>Personal Monitor Control</span>
-            </div>
-            <div class="header-right">
-                <span id="user-email-display"></span>
-                <button class="btn-logout" id="btn-logout">Keluar</button>
-            </div>
-        </header>
-
-        <div class="main-container">
-            <div class="sidebar">
-                <!-- Kartu Status Perangkat -->
-                <div class="card">
-                    <div class="card-title">Status Perangkat Real-Time</div>
-                    <div class="stat-grid">
-                        <div class="stat-box">
-                            <div class="stat-label">Baterai</div>
-                            <div class="stat-value" id="bat-val">--%</div>
-                        </div>
-                        <div class="stat-box">
-                            <div class="stat-label">Sinkronisasi</div>
-                            <div class="stat-value" id="sync-status">Menunggu...</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Kartu Koordinat GPS -->
-                <div class="card">
-                    <div class="card-title">Telemetri Lokasi GPS</div>
-                    <div class="coord-row">
-                        <span class="label-muted">Latitude</span>
-                        <span class="coord-val" id="lat-val">-</span>
-                    </div>
-                    <div class="coord-row">
-                        <span class="label-muted">Longitude</span>
-                        <span class="coord-val" id="lng-val">-</span>
-                    </div>
-                    <div class="coord-row">
-                        <span class="label-muted">Update Terakhir</span>
-                        <span id="time-val" class="time-text">-</span>
-                    </div>
-                    <a href="#" target="_blank" class="btn-maps" id="gmaps-link">Buka di Google Maps</a>
-                </div>
-
-                <!-- Panel Kontrol Multimedia WebRTC -->
-                <div class="card">
-                    <div class="card-title">Modul Remote Live (WebRTC)</div>
-                    <div class="control-grid">
-                        <button class="btn-ctrl" id="btn-cam-back">Kamera Belakang<span class="badge-sub">Video + Audio</span></button>
-                        <button class="btn-ctrl" id="btn-cam-front">Kamera Depan<span class="badge-sub">Video + Audio</span></button>
-                        <button class="btn-ctrl" id="btn-audio-only">One-Way Audio<span class="badge-sub">Mikrofon Saja</span></button>
-                        <button class="btn-ctrl" id="btn-screen-mirror">Screen Mirror<span class="badge-sub">Tampilan Layar</span></button>
-                        <button class="btn-stop" id="btn-stop-stream">Hentikan Stream</button>
-                    </div>
-
-                    <div id="stream-container">
-                        <video id="remote-video" autoplay playsinline muted controls></video>
-                        <div id="stream-status">Menghubungkan ke perangkat...</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Area Peta -->
-            <div class="map-wrapper">
-                <div id="map"></div>
-            </div>
+    <!-- Bagian Dashboard Utama -->
+    <div id="dashboard-section" class="hidden">
+      <div class="card" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+        <div>
+          <span style="color: #94a3b8; font-size: 13px;">Terhubung sebagai:</span>
+          <strong id="user-email-display"></strong>
         </div>
-    </div>
+        <button id="btn-logout" class="secondary">Keluar</button>
+      </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script type="module" src="app.js"></script>
+      <!-- Status Perangkat & GPS -->
+      <div class="card">
+        <h3>Status Perangkat & Lokasi</h3>
+        <div class="status-grid">
+          <div class="stat-box">
+            <div class="stat-label">Koneksi APK</div>
+            <div id="stat-online" class="stat-value badge-offline">Offline</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Baterai</div>
+            <div id="stat-battery" class="stat-value">-</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Terakhir Aktif</div>
+            <div id="stat-lastseen" class="stat-value" style="font-size: 14px;">-</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-label">Koordinat</div>
+            <div id="stat-coords" class="stat-value" style="font-size: 13px;">-</div>
+          </div>
+        </div>
+        <div id="map"></div>
+      </div>
+
+      <!-- Kontrol Remote Live -->
+      <div class="card">
+        <h3>Remote Live (WebRTC)</h3>
+        <div>
+          <button onclick="startRemoteStream('back')">Kamera Belakang</button>
+          <button onclick="startRemoteStream('front')">Kamera Depan</button>
+          <button onclick="startRemoteStream('audio')">Audio Saja</button>
+          <button onclick="startRemoteStream('screen')">Screen Mirror</button>
+          <button onclick="stopRemoteStream()" class="danger">Hentikan Stream</button>
+        </div>
+        <p id="webrtc-status" style="font-size: 13px; color: #94a3b8; margin: 8px 0 0 0;">Status Stream: Idle</p>
+        <video id="remote-video" autoplay playsinline controls></video>
+      </div>
+
+      <!-- Pengaturan Server TURN Otomatis ke Firebase -->
+      <div class="card">
+        <h3>Pengaturan Server TURN (Sinkron ke APK)</h3>
+        <input type="text" id="turn-username" placeholder="TURN Username" />
+        <input type="text" id="turn-credential" placeholder="TURN Credential / Password" />
+        <button id="btn-save-turn">Simpan Kredensial TURN</button>
+        <span id="turn-save-status" style="font-size: 13px; color: #22c55e; margin-left: 8px;"></span>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
